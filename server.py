@@ -7,6 +7,7 @@ from urllib.parse import quote, urlencode
 from xml.etree import ElementTree as ET
 
 import httpx
+from curl_cffi.requests import AsyncSession
 from pydantic import BaseModel, Field, HttpUrl
 
 from fastmcp import FastMCP
@@ -66,18 +67,23 @@ class WDTKClient:
         self.timeout = timeout
 
     async def get_json(self, path: str) -> dict[str, Any]:
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+        async with AsyncSession(impersonate="safari17_0") as client:
             response = await client.get(
-                path,
+                f"{self.base_url}{path}",
                 headers={"Accept": "application/json"},
+                timeout=self.timeout,
             )
             response.raise_for_status()
             return response.json()
 
     async def get_text(self, path: str, accept: str | None = None) -> str:
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+        async with AsyncSession(impersonate="safari17_0") as client:
             headers = {"Accept": accept} if accept else {}
-            response = await client.get(path, headers=headers)
+            response = await client.get(
+                f"{self.base_url}{path}",
+                headers=headers,
+                timeout=self.timeout,
+            )
             response.raise_for_status()
             return response.text
 
