@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "whatdotheyknow": {
-      "type": "http",
-      "url": "http://127.0.0.1:9000/mcp"
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "fastmcp", "run", "server.py"],
+      "cwd": "/home/bch/dev/00_RELEASE/whatdotheyknow-mcp"
     }
   }
 }
