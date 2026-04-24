@@ -53,6 +53,13 @@ class UpdateRequestStatePayload(BaseModel):
     state: str = Field(pattern="^(waiting_response|rejected|successful|partially_successful)$")
 
 
+class AuthorityResult(BaseModel):
+    name: str
+    short_name: str
+    slug: str
+    tags: str | None = None
+
+
 class WDTKClient:
     def __init__(self, base_url: str = BASE_URL, timeout: float = 20.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -174,7 +181,10 @@ async def user_feed_xml(user_slug: str, ctx: Context = CurrentContext()) -> str:
 
 @mcp.resource("wdtk://authorities/all.csv", mime_type="text/csv")
 async def all_authorities_csv(ctx: Context = CurrentContext()) -> str:
-    """Download the full authorities CSV."""
+    """Download the complete CSV of every WhatDoTheyKnow public authority.
+    WARNING: this is a large payload — use search_authorities(query) for targeted
+    lookups, or authority_json for a specific body. Only call this when you need
+    the full dataset (e.g. bulk analysis or seeding a list)."""
     await ctx.info("Fetching all-authorities CSV")
     return await wdtk.get_text("/body/all-authorities.csv", accept="text/csv, */*;q=0.1")
 
@@ -230,7 +240,12 @@ async def get_request_feed_items(
     limit: int = 20,
     ctx: Context = CurrentContext(),
 ) -> list[AtomEntry]:
-    """Return a normalized list of entries from a request Atom feed."""
+    """Return parsed Atom feed entries for a specific FOI request as structured objects.
+
+    Use this instead of reading the raw wdtk://requests/{slug}/feed resource when you
+    want structured AtomEntry objects rather than raw XML. Each entry's `link` field
+    contains the request URL; use the slug from that URL with request_json or
+    authority_json for full detail."""
     await ctx.info(f"Parsing request feed for: {request_slug}")
     xml_text = await wdtk.get_text(
         f"/request/{request_slug}/feed",
@@ -253,10 +268,14 @@ async def search_request_events(
     limit: int = 20,
     ctx: Context = CurrentContext(),
 ) -> list[AtomEntry]:
-    """
-    Query WhatDoTheyKnow's feed-based search surface.
+    """Search WhatDoTheyKnow's feed-based event index and return structured results.
 
-    Example expression:
+    Call this to find FOI requests matching a query expression. Returns up to `limit`
+    AtomEntry objects. Use the `link` field of each result as the next navigation
+    step — extract the request slug and call the wdtk://requests/{slug} resource or
+    get_request_feed_items for full detail.
+
+    Example expressions:
       status:successful
       body:"Liverpool City Council"
       (variety:sent OR variety:response) status:successful
@@ -271,7 +290,54 @@ async def search_request_events(
     return items[:limit]
 
 
-@mcp.tool(tags={"write", "admin"})
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "search"},
+)
+async def search_authorities(
+    query: str,
+    limit: int = 20,
+    ctx: Context = CurrentContext(),
+) -> list[AuthorityResult]:
+    """Search WhatDoTheyKnow public authorities by name.
+
+    Returns up to `limit` authorities whose name or short_name contains `query`
+    (case-insensitive). Use the `slug` field with authority_json or
+    build_request_url as the next step.
+
+    Example: search_authorities("Liverpool") → slug "liverpool_city_council"
+    Then: authority_json with that slug, or build_request_url with it."""
+    import csv
+    import io
+
+    await ctx.info(f"Searching authorities for: {query}")
+    csv_text = await wdtk.get_text("/body/all-authorities.csv", accept="text/csv, */*;q=0.1")
+    reader = csv.DictReader(io.StringIO(csv_text))
+    q = query.lower()
+    results: list[AuthorityResult] = []
+    for row in reader:
+        if q in row.get("name", "").lower() or q in row.get("short_name", "").lower():
+            results.append(
+                AuthorityResult(
+                    name=row.get("name", ""),
+                    short_name=row.get("short_name", ""),
+                    slug=row.get("url_name", ""),
+                    tags=row.get("tags") or None,
+                )
+            )
+            if len(results) >= limit:
+                break
+    return results
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
+    tags={"write", "admin"},
+)
 async def create_request_record(
     title: str,
     body: str,
@@ -299,7 +365,10 @@ async def create_request_record(
     )
 
 
-@mcp.tool(tags={"write", "admin"})
+@mcp.tool(
+    annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
+    tags={"write", "admin"},
+)
 async def update_request_state(
     request_id: int,
     state: str,
