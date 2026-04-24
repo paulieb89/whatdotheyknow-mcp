@@ -320,13 +320,13 @@ async def search_authorities(
     q = query.lower()
     results: list[AuthorityResult] = []
     for row in reader:
-        if q in row.get("name", "").lower() or q in row.get("short_name", "").lower():
+        if q in row.get("Name", "").lower() or q in row.get("Short name", "").lower():
             results.append(
                 AuthorityResult(
-                    name=row.get("name", ""),
-                    short_name=row.get("short_name", ""),
-                    slug=row.get("url_name", ""),
-                    tags=row.get("tags") or None,
+                    name=row.get("Name", ""),
+                    short_name=row.get("Short name", ""),
+                    slug=row.get("URL name", ""),
+                    tags=row.get("Tags") or None,
                 )
             )
             if len(results) >= limit:
