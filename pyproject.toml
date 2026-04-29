@@ -1,7 +1,7 @@
 [project]
 name = "whatdotheyknow-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "WhatDoTheyKnow MCP server — search and read UK FOI requests, authorities, and responses"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from fastmcp import FastMCP
 from fastmcp.dependencies import CurrentContext
 from fastmcp.server.context import Context
-from fastmcp.server.transforms import PromptsAsTools, ResourcesAsTools
+from fastmcp.server.transforms import PromptsAsTools
 from mcp.types import ToolAnnotations
 
 
@@ -419,8 +419,6 @@ def draft_foi_request(
     )
 
 
-# Expose resources/prompts to tool-only clients.
-mcp.add_transform(ResourcesAsTools(mcp))
 mcp.add_transform(PromptsAsTools(mcp))
 
 # Optional: keep admin/write tools hidden on the public server.
