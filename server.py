@@ -425,5 +425,19 @@ mcp.add_transform(PromptsAsTools(mcp))
 # mcp.disable(tags={"write"})
 
 
+@mcp.custom_route("/.well-known/glama.json", methods=["GET"])
+async def glama_claim(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({
+        "$schema": "https://glama.ai/mcp/schemas/connector.json",
+        "maintainers": [{"email": "paul@bouch.dev"}],
+    })
+
+
+def main() -> None:
+    port = int(os.environ.get("PORT", "9000"))
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=port)
+
+
 if __name__ == "__main__":
-    mcp.run(transport="http", host="127.0.0.1", port=9000)  
+    main()
