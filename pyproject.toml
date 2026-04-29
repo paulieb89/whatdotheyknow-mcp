@@ -10,3 +10,6 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.13.3",
 ]
+
+[project.scripts]
+whatdotheyknow-mcp = "server:main"
