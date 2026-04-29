@@ -1,0 +1,20 @@
+{
+  "$schema": "https://smithery.ai/schemas/server-config.json",
+  "name": "WhatDoTheyKnow MCP",
+  "qualifiedName": "io.github.paulieb89/whatdotheyknow-mcp",
+  "description": "Search UK FOI requests, authorities, and responses on WhatDoTheyKnow. Draft FOI requests.",
+  "license": "MIT",
+  "homepage": "https://github.com/paulieb89/whatdotheyknow-mcp",
+  "remote": {
+    "transportType": "streamable-http",
+    "url": "https://whatdotheyknow-mcp.fly.dev/mcp"
+  },
+  "tools": [
+    { "name": "search_request_events", "description": "Full-text search of FOI requests and responses" },
+    { "name": "search_authorities", "description": "Search UK public authorities by name" },
+    { "name": "get_request_feed_items", "description": "Fetch event timeline for a specific FOI request" },
+    { "name": "build_request_url", "description": "Build a prefilled WhatDoTheyKnow request URL" },
+    { "name": "create_request_record", "description": "Create a request via the write API (requires WDTK_API_KEY)" },
+    { "name": "update_request_state", "description": "Update user-assessed state of a request (requires WDTK_API_KEY)" }
+  ]
+}
