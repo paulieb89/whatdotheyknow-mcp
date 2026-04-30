@@ -5,6 +5,8 @@
 [![whatdotheyknow-mcp MCP server](https://glama.ai/mcp/servers/paulieb89/whatdotheyknow-mcp/badges/card.svg)](https://glama.ai/mcp/servers/paulieb89/whatdotheyknow-mcp)
 [![smithery badge](https://smithery.ai/badge/bouch/whatdotheyknow)](https://smithery.ai/servers/bouch/whatdotheyknow)
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=whatdotheyknow&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwhatdotheyknow-mcp.fly.dev%2Fmcp%22%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=whatdotheyknow&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwhatdotheyknow-mcp.fly.dev%2Fmcp%22%7D&quality=insiders)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=whatdotheyknow&config=eyJ0eXBlIjoiaHR0cCIsInVybCI6Imh0dHBzOi8vd2hhdGRvdGhleWtub3ctbWNwLmZseS5kZXYvbWNwIn0=)
 [![Install in VS Code (local)](https://img.shields.io/badge/VS_Code-Install_Local-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=whatdotheyknow&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22whatdotheyknow-mcp%22%5D%7D)
 
 A Model Context Protocol server for UK Freedom of Information research. Connects AI assistants to [WhatDoTheyKnow](https://www.whatdotheyknow.com/) — the UK's largest FOI request platform — to search requests, read responses, look up public authorities, and draft new requests.
