@@ -440,6 +440,12 @@ async def glama_claim(request):
     })
 
 
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"status": "healthy"})
+
+
 def main() -> None:
     port = int(os.environ.get("PORT", "9000"))
     mcp.run(transport="streamable-http", host="0.0.0.0", port=port)
