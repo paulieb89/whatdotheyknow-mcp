@@ -35,19 +35,33 @@ A Model Context Protocol server for UK Freedom of Information research. Connects
 |--------|-------------|
 | `draft_foi_request` | Draft a narrow, specific FOI request for a given authority and topic. |
 
-## Quickstart
+## Connect
 
-### Run locally
+### Hosted (no install)
 
-```bash
-pip install fastmcp httpx pydantic
-fastmcp run server.py
+```json
+{
+  "mcpServers": {
+    "whatdotheyknow": {
+      "type": "http",
+      "url": "https://whatdotheyknow-mcp.fly.dev/mcp"
+    }
+  }
+}
 ```
 
-Inspect with the MCP Inspector:
+### Local (uvx)
 
-```bash
-npx @modelcontextprotocol/inspector http://localhost:8000/mcp
+```json
+{
+  "mcpServers": {
+    "whatdotheyknow": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["whatdotheyknow-mcp"]
+    }
+  }
+}
 ```
 
 ## Environment variables
