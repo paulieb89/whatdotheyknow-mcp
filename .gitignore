@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Scratch files
+introduction-to-model-context-protocol.md
+model-context-protocol-advanced-topics.md
+tests/fleet_token_audit.py
