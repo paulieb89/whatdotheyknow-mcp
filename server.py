@@ -425,6 +425,12 @@ mcp.add_transform(PromptsAsTools(mcp))
 # mcp.disable(tags={"write"})
 
 
+@mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
+async def smithery_server_card(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.0"}})
+
+
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])
 async def glama_claim(request):
     from starlette.responses import JSONResponse
