@@ -2,6 +2,7 @@
 
 <!-- mcp-name: io.github.paulieb89/whatdotheyknow-mcp -->
 
+[![whatdotheyknow-mcp MCP server](https://glama.ai/mcp/servers/paulieb89/whatdotheyknow-mcp/badges/card.svg)](https://glama.ai/mcp/servers/paulieb89/whatdotheyknow-mcp)
 [![smithery badge](https://smithery.ai/badge/bouch/whatdotheyknow)](https://smithery.ai/servers/bouch/whatdotheyknow)
 
 A Model Context Protocol server for UK Freedom of Information research. Connects AI assistants to [WhatDoTheyKnow](https://www.whatdotheyknow.com/) — the UK's largest FOI request platform — to search requests, read responses, look up public authorities, and draft new requests.
