@@ -452,7 +452,7 @@ async def health_check(request):
 
 def main() -> None:
     port = int(os.environ.get("PORT", "9000"))
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=port)
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=port, stateless_http=True)
 
 
 if __name__ == "__main__":
