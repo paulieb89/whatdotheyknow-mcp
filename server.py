@@ -356,7 +356,9 @@ async def create_request_record(
 
     Requires WDTK_API_KEY in the server environment.
     """
-    api_key = os.environ["WDTK_API_KEY"]
+    api_key = os.getenv("WDTK_API_KEY")
+    if not api_key:
+        return {"error": "Write API unavailable: WDTK_API_KEY not configured. Requires an authority-level key from the WhatDoTheyKnow admin interface."}
     payload = CreateRequestPayload(
         title=title,
         body=body,
@@ -385,7 +387,9 @@ async def update_request_state(
 
     Requires WDTK_API_KEY in the server environment.
     """
-    api_key = os.environ["WDTK_API_KEY"]
+    api_key = os.getenv("WDTK_API_KEY")
+    if not api_key:
+        return {"error": "Write API unavailable: WDTK_API_KEY not configured. Requires an authority-level key from the WhatDoTheyKnow admin interface."}
     payload = UpdateRequestStatePayload(state=state)
     await ctx.info(f"Updating request {request_id} to state={state}")
     return await wdtk.post_form_json(
