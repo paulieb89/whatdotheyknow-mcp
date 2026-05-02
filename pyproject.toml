@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "whatdotheyknow-mcp"
 version = "0.1.0"
@@ -13,3 +17,9 @@ dependencies = [
 
 [project.scripts]
 whatdotheyknow-mcp = "server:main"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["server.py", "main.py"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["fly.toml", "Dockerfile", "server.json", ".mcp.json", "dist/", "tests/", "uv.lock"]
