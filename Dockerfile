@@ -12,7 +12,8 @@ RUN pip install --no-cache-dir --upgrade pip \
         "fastmcp>=3.2.4" \
         "httpx>=0.28.1" \
         "pydantic>=2.13.3" \
-        "curl-cffi>=0.15.0"
+        "curl-cffi>=0.15.0" \
+        "prometheus-client==0.24.1"
 
 COPY . .
 
