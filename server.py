@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import functools
 import json
 import os
+import time
 from typing import Any
 from urllib.parse import quote, urlencode
 from xml.etree import ElementTree as ET
 
 import httpx
 from curl_cffi.requests import AsyncSession
+from prometheus_client import CONTENT_TYPE_LATEST, Counter as PromCounter, Histogram, generate_latest
 from pydantic import BaseModel, Field, HttpUrl
+from starlette.responses import JSONResponse, Response
 
 from fastmcp import FastMCP
 from fastmcp.dependencies import CurrentContext
@@ -18,6 +22,42 @@ from mcp.types import ToolAnnotations
 
 
 BASE_URL = "https://www.whatdotheyknow.com"
+
+TRANSPORT = os.getenv("FASTMCP_TRANSPORT", "http")
+REGION = os.getenv("FLY_REGION", "local")
+
+tool_calls_total = PromCounter(
+    "whatdotheyknow_tool_calls_total",
+    "Count of MCP tool invocations.",
+    labelnames=["tool", "transport", "region", "status"],
+)
+tool_duration_seconds = Histogram(
+    "whatdotheyknow_tool_duration_seconds",
+    "Tool invocation latency in seconds.",
+    labelnames=["tool", "transport", "region"],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+
+
+def _timed_tool(fn):
+    tool_name = fn.__name__
+
+    @functools.wraps(fn)
+    async def wrapped(*args, **kwargs):
+        t0 = time.perf_counter()
+        try:
+            result = await fn(*args, **kwargs)
+            tool_calls_total.labels(tool_name, TRANSPORT, REGION, "ok").inc()
+            return result
+        except BaseException:
+            tool_calls_total.labels(tool_name, TRANSPORT, REGION, "error").inc()
+            raise
+        finally:
+            tool_duration_seconds.labels(tool_name, TRANSPORT, REGION).observe(
+                time.perf_counter() - t0
+            )
+
+    return wrapped
 
 
 class NewRequestLink(BaseModel):
@@ -241,6 +281,7 @@ def build_request_url(
     ),
     tags={"public", "feed"},
 )
+@_timed_tool
 async def get_request_feed_items(
     request_slug: str,
     limit: int = 20,
@@ -269,6 +310,7 @@ async def get_request_feed_items(
     ),
     tags={"public", "search"},
 )
+@_timed_tool
 async def search_request_events(
     search_expression: str,
     limit: int = 20,
@@ -304,6 +346,7 @@ async def search_request_events(
     ),
     tags={"public", "search"},
 )
+@_timed_tool
 async def search_authorities(
     query: str,
     limit: int = 20,
@@ -344,6 +387,7 @@ async def search_authorities(
     annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
     tags={"write", "admin"},
 )
+@_timed_tool
 async def create_request_record(
     title: str,
     body: str,
@@ -377,6 +421,7 @@ async def create_request_record(
     annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
     tags={"write", "admin"},
 )
+@_timed_tool
 async def update_request_state(
     request_id: int,
     state: str,
@@ -431,13 +476,11 @@ mcp.add_transform(PromptsAsTools(mcp))
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def smithery_server_card(request):
-    from starlette.responses import JSONResponse
-    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.0"}})
+    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.1"}})
 
 
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])
 async def glama_claim(request):
-    from starlette.responses import JSONResponse
     return JSONResponse({
         "$schema": "https://glama.ai/mcp/schemas/connector.json",
         "maintainers": [{"email": "paul@bouch.dev"}],
@@ -446,8 +489,12 @@ async def glama_claim(request):
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
-    from starlette.responses import JSONResponse
     return JSONResponse({"status": "healthy"})
+
+
+@mcp.custom_route("/metrics", methods=["GET"])
+async def metrics_endpoint(request):
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 def main() -> None:
