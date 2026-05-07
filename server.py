@@ -476,7 +476,7 @@ mcp.add_transform(PromptsAsTools(mcp))
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def smithery_server_card(request):
-    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.1"}})
+    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.3"}})
 
 
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])
@@ -497,9 +497,49 @@ async def metrics_endpoint(request):
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+class _AcceptNormalizer:
+    """Stamp Accept to the MCP-spec value on /mcp only, so json_response=True never 406s.
+
+    Anthropic sends mixed Accept headers per request type (application/json for
+    initialize, text/event-stream for tools/list). Only stamp the MCP endpoint —
+    leave /metrics, /health, /.well-known/* with their original Accept headers.
+    """
+    def __init__(self, app, mcp_path: bytes = b"/mcp"):
+        self.app = app
+        self._mcp_path = mcp_path.rstrip(b"/")
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and scope.get("path", "").rstrip("/").encode() == self._mcp_path:
+            headers = [
+                (b"accept", b"application/json, text/event-stream")
+                if name.lower() == b"accept"
+                else (name, value)
+                for name, value in scope.get("headers", [])
+            ]
+            scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
+
+
 def main() -> None:
-    port = int(os.environ.get("PORT", "9000"))
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=port, stateless_http=True)
+    import uvicorn
+    from fastmcp.server.http import create_streamable_http_app
+
+    port = int(os.environ.get("PORT", "8080"))
+    app = create_streamable_http_app(
+        mcp,
+        streamable_http_path="/mcp",
+        json_response=True,
+        stateless_http=True,
+    )
+    uvicorn.run(
+        _AcceptNormalizer(app),
+        host="0.0.0.0",
+        port=port,
+        forwarded_allow_ips="*",
+        proxy_headers=True,
+        lifespan="on",
+        log_level="info",
+    )
 
 
 if __name__ == "__main__":
