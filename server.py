@@ -10,6 +10,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 from curl_cffi.requests import AsyncSession
+from bs4 import BeautifulSoup
 from prometheus_client import CONTENT_TYPE_LATEST, Counter as PromCounter, Histogram, generate_latest
 from pydantic import BaseModel, Field, HttpUrl
 from starlette.responses import JSONResponse, Response
@@ -20,11 +21,10 @@ from fastmcp.server.context import Context
 from fastmcp.server.transforms import PromptsAsTools
 from mcp.types import ToolAnnotations
 
-
 BASE_URL = "https://www.whatdotheyknow.com"
-
 TRANSPORT = os.getenv("FASTMCP_TRANSPORT", "http")
 REGION = os.getenv("FLY_REGION", "local")
+
 
 tool_calls_total = PromCounter(
     "whatdotheyknow_tool_calls_total",
@@ -101,6 +101,10 @@ class AuthorityResult(BaseModel):
     tags: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# HTTP client
+# ---------------------------------------------------------------------------
+
 class WDTKClient:
     def __init__(self, base_url: str = BASE_URL, timeout: float = 20.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -137,7 +141,6 @@ class WDTKClient:
     ) -> dict[str, Any]:
         data = {"json": json.dumps(json_payload)}
         params = {"k": api_key}
-
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
             response = await client.post(path, params=params, data=data, files=files)
             response.raise_for_status()
@@ -148,7 +151,6 @@ def parse_atom(xml_text: str) -> list[AtomEntry]:
     ns = {"atom": "http://www.w3.org/2005/Atom"}
     root = ET.fromstring(xml_text)
     entries: list[AtomEntry] = []
-
     for entry in root.findall("atom:entry", ns):
         link_el = entry.find("atom:link", ns)
         summary_el = entry.find("atom:summary", ns)
@@ -161,7 +163,6 @@ def parse_atom(xml_text: str) -> list[AtomEntry]:
                 summary=("".join(summary_el.itertext()).strip() if summary_el is not None else None),
             )
         )
-
     return entries
 
 
@@ -228,6 +229,7 @@ async def user_feed_xml(user_slug: str, ctx: Context = CurrentContext()) -> str:
 @mcp.resource("wdtk://authorities/all.csv", mime_type="text/csv")
 async def all_authorities_csv(ctx: Context = CurrentContext()) -> str:
     """Download the complete CSV of every WhatDoTheyKnow public authority.
+
     WARNING: this is a large payload — use search_authorities(query) for targeted
     lookups, or authority_json for a specific body. Only call this when you need
     the full dataset (e.g. bulk analysis or seeding a list)."""
@@ -264,12 +266,10 @@ def build_request_url(
         params["body"] = body
     if tags:
         params["tags"] = " ".join(tags)
-
     query = urlencode(params, doseq=False)
     url = f"{BASE_URL}/new/{authority_slug}"
     if query:
         url = f"{url}?{query}"
-
     return NewRequestLink(authority_slug=authority_slug, url=url)
 
 
@@ -327,6 +327,7 @@ async def search_request_events(
       status:successful
       body:"Liverpool City Council"
       (variety:sent OR variety:response) status:successful
+
     """
     await ctx.info(f"Searching WDTK feed with expression: {search_expression}")
     encoded = quote(search_expression, safe="")
@@ -383,6 +384,264 @@ async def search_authorities(
     return results
 
 
+# ----------------------------------------------------------------
+# NEW TOOLS: expose Resources as callable tools for MCP clients
+# that cannot access Resources directly (e.g. Claude.ai connectors)
+# ----------------------------------------------------------------
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_request_detail(
+    request_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Fetch full detail for a specific FOI request, including the original request
+    text, all responses, current status, dates, and correspondence history.
+
+    The request_slug is the URL-friendly identifier found in WhatDoTheyKnow URLs,
+    e.g. 'payroll_system_synchronization_f_2' from
+    https://www.whatdotheyknow.com/request/payroll_system_synchronization_f_2
+
+    Returns the complete JSON object from WhatDoTheyKnow's API, which typically
+    includes: title, status, created_at, updated_at, described_state, user info,
+    public_body info, and the full info_request_events array containing every
+    outgoing message and incoming response with their body text."""
+    await ctx.info(f"Fetching request detail: {request_slug}")
+    return await wdtk.get_json(f"/request/{request_slug}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_user_requests(
+    user_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Fetch a WhatDoTheyKnow user profile and their FOI requests.
+
+    The user_slug is the URL-friendly identifier from the user's profile page,
+    e.g. 'g_spinks' from https://www.whatdotheyknow.com/user/g_spinks
+
+    Returns the JSON user object which typically includes: the user's display name,
+    about_me text, and an array of their info_requests with titles, slugs, statuses,
+    authorities, and URLs. Use the request slugs from the results with
+    get_request_detail to fetch full correspondence for any individual request."""
+    await ctx.info(f"Fetching user profile and requests: {user_slug}")
+    return await wdtk.get_json(f"/user/{user_slug}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_authority_detail(
+    authority_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Fetch full detail for a public authority, including contact info and stats.
+
+    The authority_slug is the URL-friendly identifier found in WhatDoTheyKnow URLs,
+    e.g. 'essex_police' from https://www.whatdotheyknow.com/body/essex_police
+
+    Returns the complete JSON object from WhatDoTheyKnow's API, which typically
+    includes: name, short_name, notes (description), created_at, updated_at,
+    home_page, request_email, tag_string, info_requests (recent requests to this
+    authority), and disclosure_log URL if available."""
+    await ctx.info(f"Fetching authority detail: {authority_slug}")
+    return await wdtk.get_json(f"/body/{authority_slug}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_request_v2(
+    request_id: int,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return full detail for a specific FOI request using the Alaveteli v2 API.
+
+    The v2 API may return more complete data than v1, including full message body
+    text rather than truncated summaries. The request_id is the numeric ID found
+    in v1 API responses (e.g. the 'id' field from get_request_detail)."""
+    await ctx.info(f"Fetching v2 request detail: {request_id}")
+    return await wdtk.get_json(f"/api/v2/request/{request_id}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_request_messages(
+    request_id: int,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return the message list for a specific FOI request via the Alaveteli v2 API.
+
+    This dedicated messages endpoint may return a structured list of individual
+    messages in the correspondence, including full body text for each. The
+    request_id is the numeric ID found in v1 API responses."""
+    await ctx.info(f"Fetching v2 request messages: {request_id}")
+    return await wdtk.get_json(f"/api/v2/request/{request_id}/messages.json")
+
+
+# -------------------------
+# NEW TOOL: Scrape HTML correspondence (curl-cffi + BeautifulSoup)
+# -------------------------
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_request_correspondence(
+    request_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Fetch and parse the actual message bodies from a WhatDoTheyKnow request page.
+
+    Uses browser impersonation (curl-cffi with Safari 17 user agent) to fetch the HTML
+    request page and parses out the full correspondence text using BeautifulSoup. This
+    complements get_request_detail by providing the actual message body content that
+    the JSON API truncates or omits.
+
+    The request_slug is the URL-friendly identifier from WhatDoTheyKnow URLs,
+    e.g. 'payroll_system_synchronization_f_2'.
+
+    Returns a dict containing:
+    - title: request title
+    - status: current status
+    - messages: list of message dicts with 'type', 'date', 'from', and 'body'
+    - url: link to the original request
+    """
+    await ctx.info(f"Scraping request correspondence: {request_slug}")
+
+    url = f"{BASE_URL}/request/{request_slug}"
+
+    try:
+        async with AsyncSession(impersonate="safari17_0") as client:
+            response = await client.get(url, timeout=20.0)
+            response.raise_for_status()
+            html_text = response.text
+    except Exception as e:
+        return {"error": f"Failed to fetch request page: {str(e)}", "url": url}
+
+    try:
+        soup = BeautifulSoup(html_text, "html.parser")
+    except Exception as e:
+        return {"error": f"Failed to parse HTML: {str(e)}", "url": url}
+
+    title_elem = soup.find("h1")
+    title = title_elem.get_text(strip=True) if title_elem else "Unknown"
+
+    status = "Unknown"
+    status_elem = soup.find("span", class_="request-status")
+    if status_elem:
+        status = status_elem.get_text(strip=True)
+
+    messages = []
+
+    message_containers = soup.find_all("div", class_=lambda x: x and "event" in x.lower())
+
+    if not message_containers:
+        message_containers = soup.find_all("div", class_=lambda x: x and any(
+            cls in (x or "") for cls in ["correspondence", "message", "letter", "response"]
+        ))
+
+    if not message_containers:
+        message_containers = soup.find_all("div", {"data-event-id": True})
+
+    for container in message_containers:
+        try:
+            msg_type = "unknown"
+            msg_date = ""
+            msg_from = ""
+            msg_body = ""
+
+            if "request" in container.get("class", []):
+                msg_type = "request"
+            elif "response" in container.get("class", []):
+                msg_type = "response"
+
+            date_elem = container.find(["span", "div"], class_=lambda x: x and any(
+                d in (x or "") for d in ["date", "time", "timestamp"]
+            ))
+            if date_elem:
+                msg_date = date_elem.get_text(strip=True)
+
+            from_elem = container.find(["span", "div"], class_=lambda x: x and any(
+                f in (x or "") for f in ["from", "sender", "authority", "user"]
+            ))
+            if from_elem:
+                msg_from = from_elem.get_text(strip=True)
+
+            body_elem = container.find(["div", "p"], class_=lambda x: x and any(
+                b in (x or "") for b in ["body", "content", "message", "text"]
+            ))
+            if body_elem:
+                msg_body = body_elem.get_text(strip=True)
+            else:
+                for script in container(["script", "style"]):
+                    script.decompose()
+                msg_body = container.get_text(separator="\n", strip=True)
+
+            if msg_body:
+                messages.append({
+                    "type": msg_type,
+                    "date": msg_date,
+                    "from": msg_from,
+                    "body": msg_body,
+                })
+        except Exception as e:
+            await ctx.info(f"Error parsing message container: {str(e)}")
+            continue
+
+    return {
+        "title": title,
+        "status": status,
+        "url": url,
+        "message_count": len(messages),
+        "messages": messages,
+        "note": "This data is extracted by parsing the HTML page. Some formatting may differ from the original.",
+    }
+
+
+# -------------------------
+# Write tools (API key)
+# -------------------------
+
 @mcp.tool(
     annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
     tags={"write", "admin"},
@@ -403,6 +662,7 @@ async def create_request_record(
     api_key = os.getenv("WDTK_API_KEY")
     if not api_key:
         return {"error": "Write API unavailable: WDTK_API_KEY not configured. Requires an authority-level key from the WhatDoTheyKnow admin interface."}
+
     payload = CreateRequestPayload(
         title=title,
         body=body,
@@ -435,6 +695,7 @@ async def update_request_state(
     api_key = os.getenv("WDTK_API_KEY")
     if not api_key:
         return {"error": "Write API unavailable: WDTK_API_KEY not configured. Requires an authority-level key from the WhatDoTheyKnow admin interface."}
+
     payload = UpdateRequestStatePayload(state=state)
     await ctx.info(f"Updating request {request_id} to state={state}")
     return await wdtk.post_form_json(
@@ -476,7 +737,7 @@ mcp.add_transform(PromptsAsTools(mcp))
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def smithery_server_card(request):
-    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.3"}})
+    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.2.0"}})
 
 
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])
@@ -504,6 +765,7 @@ class _AcceptNormalizer:
     initialize, text/event-stream for tools/list). Only stamp the MCP endpoint —
     leave /metrics, /health, /.well-known/* with their original Accept headers.
     """
+
     def __init__(self, app, mcp_path: bytes = b"/mcp"):
         self.app = app
         self._mcp_path = mcp_path.rstrip(b"/")
@@ -540,6 +802,10 @@ def main() -> None:
         lifespan="on",
         log_level="info",
     )
+
+
+def main_stdio() -> None:
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
