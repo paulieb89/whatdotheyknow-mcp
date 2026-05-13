@@ -20,6 +20,9 @@ A Model Context Protocol server for UK Freedom of Information research. Connects
 | `search_authorities` | Search UK public authorities by name. Returns slug for use with other tools. |
 | `get_request_feed_items` | Fetch the event timeline (sent, response, clarification) for a specific FOI request. |
 | `build_request_url` | Build a prefilled WhatDoTheyKnow request URL for a given authority and topic. |
+| `get_request_detail` | **NEW** — Return full FOI request detail including correspondence text, status, dates, and info_request_events. |
+| `get_user_requests` | **NEW** — Return a user profile and their complete list of submitted FOI requests. |
+| `get_authority_detail` | **NEW** — Return full authority detail including contact info, description, and recent requests. |
 | `create_request_record` | Create a request via the write API (requires `WDTK_API_KEY`). |
 | `update_request_state` | Update user-assessed state of a request (requires `WDTK_API_KEY`). |
 
@@ -39,6 +42,19 @@ A Model Context Protocol server for UK Freedom of Information research. Connects
 | Prompt | Description |
 |--------|-------------|
 | `draft_foi_request` | Draft a narrow, specific FOI request for a given authority and topic. |
+
+## What's new in this fork
+
+This fork adds three tools that expose the existing MCP Resources as directly callable tools:
+`get_request_detail`, `get_user_requests`, and `get_authority_detail`.
+
+Many MCP clients — including Claude.ai connectors — can only call **tools**, not Resources directly.
+The upstream server exposes request, user, and authority data exclusively as `wdtk://` Resources,
+which means those clients have no way to read full FOI request detail or authority profiles.
+These three tools wrap the same underlying JSON endpoints so every client can reach them.
+
+It also adds a `whatdotheyknow-mcp-stdio` entry point for clients (such as Claude Desktop) that
+require stdio transport rather than an HTTP server.
 
 ## Connect
 

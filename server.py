@@ -384,6 +384,70 @@ async def search_authorities(
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_request_detail(
+    request_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return full detail for a specific FOI request.
+
+    Returns the complete JSON including full correspondence text, current status,
+    key dates, and info_request_events. Use the slug from search_request_events
+    or get_request_feed_items results."""
+    await ctx.info(f"Fetching request detail: {request_slug}")
+    return await wdtk.get_json(f"/request/{request_slug}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_user_requests(
+    user_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return a user profile and their list of FOI requests.
+
+    Returns the user's public profile JSON including their name and the full
+    list of FOI requests they have submitted on WhatDoTheyKnow."""
+    await ctx.info(f"Fetching user profile: {user_slug}")
+    return await wdtk.get_json(f"/user/{user_slug}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_authority_detail(
+    authority_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return full detail for a specific public authority.
+
+    Returns the authority's contact information, description, and recent FOI
+    requests. Use the slug from search_authorities results."""
+    await ctx.info(f"Fetching authority detail: {authority_slug}")
+    return await wdtk.get_json(f"/body/{authority_slug}.json")
+
+
+@mcp.tool(
     annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
     tags={"write", "admin"},
 )
@@ -476,7 +540,7 @@ mcp.add_transform(PromptsAsTools(mcp))
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def smithery_server_card(request):
-    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.3"}})
+    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.2.0"}})
 
 
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])
