@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 whatdotheyknow-mcp = "server:main"
+whatdotheyknow-mcp-stdio = "server:main_stdio"
 
 [tool.hatch.build.targets.wheel]
 only-include = ["server.py", "main.py"]
