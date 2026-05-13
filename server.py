@@ -448,6 +448,50 @@ async def get_authority_detail(
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_request_v2(
+    request_id: int,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return full detail for a specific FOI request using the Alaveteli v2 API.
+
+    The v2 API may return more complete data than v1, including full message body
+    text rather than truncated summaries. The request_id is the numeric ID found
+    in v1 API responses (e.g. the 'id' field from get_request_detail)."""
+    await ctx.info(f"Fetching v2 request detail: {request_id}")
+    return await wdtk.get_json(f"/api/v2/request/{request_id}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "read"},
+)
+@_timed_tool
+async def get_request_messages(
+    request_id: int,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return the message list for a specific FOI request via the Alaveteli v2 API.
+
+    This dedicated messages endpoint may return a structured list of individual
+    messages in the correspondence, including full body text for each. The
+    request_id is the numeric ID found in v1 API responses."""
+    await ctx.info(f"Fetching v2 request messages: {request_id}")
+    return await wdtk.get_json(f"/api/v2/request/{request_id}/messages.json")
+
+
+@mcp.tool(
     annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
     tags={"write", "admin"},
 )

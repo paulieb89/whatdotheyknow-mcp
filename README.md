@@ -23,6 +23,8 @@ A Model Context Protocol server for UK Freedom of Information research. Connects
 | `get_request_detail` | **NEW** — Return full FOI request detail including correspondence text, status, dates, and info_request_events. |
 | `get_user_requests` | **NEW** — Return a user profile and their complete list of submitted FOI requests. |
 | `get_authority_detail` | **NEW** — Return full authority detail including contact info, description, and recent requests. |
+| `get_request_v2` | **NEW** — Return full FOI request detail via the Alaveteli v2 API, which may include complete message body text. Takes numeric `request_id` from v1 responses. |
+| `get_request_messages` | **NEW** — Return the structured message list for a request via the Alaveteli v2 API, with full body text per message. Takes numeric `request_id`. |
 | `create_request_record` | Create a request via the write API (requires `WDTK_API_KEY`). |
 | `update_request_state` | Update user-assessed state of a request (requires `WDTK_API_KEY`). |
 
