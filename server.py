@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import functools
+import html
 import json
 import os
+import re
 import time
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import quote, urlencode
 from xml.etree import ElementTree as ET
@@ -25,6 +28,9 @@ BASE_URL = "https://www.whatdotheyknow.com"
 
 TRANSPORT = os.getenv("FASTMCP_TRANSPORT", "http")
 REGION = os.getenv("FLY_REGION", "local")
+INVALID_XML_CHARS_RE = re.compile(
+    r"[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]"
+)
 
 tool_calls_total = PromCounter(
     "whatdotheyknow_tool_calls_total",
@@ -69,8 +75,23 @@ class AtomEntry(BaseModel):
     id: str | None = None
     title: str | None = None
     link: str | None = None
+    published: str | None = None
     updated: str | None = None
     summary: str | None = None
+    content: str | None = None
+    content_html: str | None = None
+
+
+class UserRequestResult(BaseModel):
+    title: str | None = None
+    request_slug: str | None = None
+    url: str | None = None
+    status: str | None = None
+    authority_name: str | None = None
+    authority_slug: str | None = None
+    updated: str | None = None
+    event: str | None = None
+    snippet: str | None = None
 
 
 class CreateRequestPayload(BaseModel):
@@ -146,23 +167,119 @@ class WDTKClient:
 
 def parse_atom(xml_text: str) -> list[AtomEntry]:
     ns = {"atom": "http://www.w3.org/2005/Atom"}
+    xml_text = INVALID_XML_CHARS_RE.sub("", xml_text)
     root = ET.fromstring(xml_text)
     entries: list[AtomEntry] = []
 
     for entry in root.findall("atom:entry", ns):
         link_el = entry.find("atom:link", ns)
         summary_el = entry.find("atom:summary", ns)
+        content_el = entry.find("atom:content", ns)
+        summary = _xml_element_text(summary_el)
+        content_html = _xml_element_text(content_el)
+        content = html_to_text(content_html) if content_html else None
         entries.append(
             AtomEntry(
                 id=(entry.findtext("atom:id", default=None, namespaces=ns)),
                 title=(entry.findtext("atom:title", default=None, namespaces=ns)),
                 link=(link_el.get("href") if link_el is not None else None),
+                published=(entry.findtext("atom:published", default=None, namespaces=ns)),
                 updated=(entry.findtext("atom:updated", default=None, namespaces=ns)),
-                summary=("".join(summary_el.itertext()).strip() if summary_el is not None else None),
+                summary=summary or content,
+                content=content,
+                content_html=content_html,
             )
         )
 
     return entries
+
+
+class _HTMLTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        if data.strip():
+            self.parts.append(data)
+
+    def text(self) -> str:
+        return re.sub(r"\s+", " ", " ".join(self.parts)).strip()
+
+
+def html_to_text(value: str) -> str:
+    parser = _HTMLTextExtractor()
+    parser.feed(html.unescape(value))
+    parser.close()
+    return parser.text()
+
+
+def _xml_element_text(element: ET.Element | None) -> str | None:
+    if element is None:
+        return None
+    text = "".join(element.itertext()).strip()
+    return text or None
+
+
+def _first_match(pattern: str, text: str) -> re.Match[str] | None:
+    return re.search(pattern, text, flags=re.IGNORECASE | re.DOTALL)
+
+
+def _strip_fragment(path: str) -> str:
+    return path.split("#", 1)[0].split("?", 1)[0]
+
+
+def parse_user_requests_html(html_text: str, limit: int) -> list[UserRequestResult]:
+    chunks = re.split(r'(?=<div class="request_listing">)', html_text)
+    results: list[UserRequestResult] = []
+
+    for chunk in chunks:
+        if 'class="request_listing"' not in chunk:
+            continue
+
+        title: str | None = None
+        request_slug: str | None = None
+        url: str | None = None
+        head = _first_match(r'<span class="head">\s*<a href="([^"]+)">(.*?)</a>', chunk)
+        if head:
+            href = html.unescape(head.group(1))
+            title = html_to_text(head.group(2))
+            path = _strip_fragment(href)
+            slug_match = re.search(r"/request/([^/]+)$", path)
+            if slug_match:
+                request_slug = slug_match.group(1)
+                url = f"{BASE_URL}/request/{request_slug}"
+
+        authority_name: str | None = None
+        authority_slug: str | None = None
+        authority = _first_match(r'href="https://www\.whatdotheyknow\.com/body/([^"]+)">(.*?)</a>', chunk)
+        if authority:
+            authority_slug = html.unescape(authority.group(1))
+            authority_name = html_to_text(authority.group(2))
+
+        status_match = _first_match(r"<strong>\s*(.*?)\s*</strong>", chunk)
+        time_match = _first_match(r'<time datetime="([^"]+)"', chunk)
+        requester_match = _first_match(r'<div class="requester">\s*(.*?)\s*</div>', chunk)
+        snippet_match = _first_match(r'<span class="desc">\s*(.*?)\s*</span>', chunk)
+
+        item = UserRequestResult(
+            title=title,
+            request_slug=request_slug,
+            url=url,
+            status=html_to_text(status_match.group(1)) if status_match else None,
+            authority_name=authority_name,
+            authority_slug=authority_slug,
+            updated=html.unescape(time_match.group(1)) if time_match else None,
+            event=html_to_text(requester_match.group(1)) if requester_match else None,
+            snippet=html_to_text(snippet_match.group(1)) if snippet_match else None,
+        )
+
+        if item.request_slug or item.title:
+            results.append(item)
+            if len(results) >= limit:
+                break
+
+    return results
 
 
 wdtk = WDTKClient()
@@ -291,14 +408,123 @@ async def get_request_feed_items(
 
     Use this instead of reading the raw wdtk://requests/{slug}/feed resource when you
     want structured AtomEntry objects rather than raw XML. Each entry's `link` field
-    contains the request URL; use the slug from that URL with request_json or
-    authority_json for full detail."""
+    contains the request URL; use the slug from that URL with get_request_detail
+    for full detail."""
     await ctx.info(f"Parsing request feed for: {request_slug}")
     xml_text = await wdtk.get_text(
         f"/request/{request_slug}/feed",
         accept="application/atom+xml, application/xml;q=0.9, */*;q=0.1",
     )
     items = parse_atom(xml_text)
+    return items[:limit]
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "request"},
+)
+@_timed_tool
+async def get_request_detail(
+    request_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return full public JSON for a WhatDoTheyKnow FOI request.
+
+    The response includes request metadata, public body details, requester details,
+    state/status fields, and the visible info_request_events array containing
+    correspondence text and attachment metadata where WhatDoTheyKnow exposes it.
+    """
+    await ctx.info(f"Fetching request detail JSON: {request_slug}")
+    return await wdtk.get_json(f"/request/{request_slug}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "authority"},
+)
+@_timed_tool
+async def get_authority_detail(
+    authority_slug: str,
+    ctx: Context = CurrentContext(),
+) -> dict[str, Any]:
+    """Return full public JSON for a WhatDoTheyKnow public authority.
+
+    The response includes contact/profile fields, tags, publication links, and
+    request statistics such as successful, overdue, and classified request counts
+    where WhatDoTheyKnow exposes them.
+    """
+    await ctx.info(f"Fetching authority detail JSON: {authority_slug}")
+    return await wdtk.get_json(f"/body/{authority_slug}.json")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "feed", "user"},
+)
+@_timed_tool
+async def get_user_feed_items(
+    user_slug: str,
+    limit: int = 20,
+    ctx: Context = CurrentContext(),
+) -> list[AtomEntry]:
+    """Return parsed Atom feed entries for a user's WhatDoTheyKnow activity.
+
+    Unlike the raw wdtk://users/{slug}/feed resource, this returns structured
+    entries with the Atom content converted to readable text in `content` and
+    mirrored to `summary` for clients that only display summary fields.
+    """
+    await ctx.info(f"Parsing user feed for: {user_slug}")
+    xml_text = await wdtk.get_text(
+        f"/feed/user/{user_slug}",
+        accept="application/atom+xml, application/xml;q=0.9, */*;q=0.1",
+    )
+    items = parse_atom(xml_text)
+    return items[:limit]
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    tags={"public", "user"},
+)
+@_timed_tool
+async def get_user_requests(
+    user_slug: str,
+    status_filter: str | None = None,
+    limit: int = 20,
+    ctx: Context = CurrentContext(),
+) -> list[UserRequestResult]:
+    """List a user's visible WhatDoTheyKnow requests from their public requests page.
+
+    Returns request title, slug, URL, current displayed status, authority, updated
+    timestamp, event text, and the page snippet. `status_filter` is a
+    case-insensitive substring match against the displayed status.
+    """
+    await ctx.info(f"Fetching request list for user: {user_slug}")
+    html_text = await wdtk.get_text(
+        f"/user/{user_slug}/requests",
+        accept="text/html, application/xhtml+xml;q=0.9, */*;q=0.1",
+    )
+    parse_limit = limit if status_filter is None else max(limit * 4, 50)
+    items = parse_user_requests_html(html_text, limit=parse_limit)
+    if status_filter:
+        needle = status_filter.lower()
+        items = [item for item in items if item.status and needle in item.status.lower()]
     return items[:limit]
 
 
@@ -320,7 +546,7 @@ async def search_request_events(
 
     Call this to find FOI requests matching a query expression. Returns up to `limit`
     AtomEntry objects. Use the `link` field of each result as the next navigation
-    step — extract the request slug and call the wdtk://requests/{slug} resource or
+    step — extract the request slug and call get_request_detail or
     get_request_feed_items for full detail.
 
     Example expressions:
@@ -476,7 +702,7 @@ mcp.add_transform(PromptsAsTools(mcp))
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def smithery_server_card(request):
-    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.3"}})
+    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.4"}})
 
 
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])

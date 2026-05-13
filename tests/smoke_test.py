@@ -85,32 +85,36 @@ PROBES: list[Probe] = [
     # Uses a real WDTK slug (high-profile long-running request).
     Probe(
         tool="get_request_feed_items",
-        args={"request_slug": "a_request_about_facial_recogni", "limit": 20},
-        note="Feed items — known active request; error expected if slug stale",
+        args={"request_slug": "sciontec_hemisphere_agreement", "limit": 20},
+        note="Feed items — known visible request timeline",
     ),
-    # ─── read_resource (via ResourcesAsTools) ────────────────────────────────
     Probe(
-        tool="read_resource",
-        args={"uri": "wdtk://authorities/liverpool_city_council"},
+        tool="get_request_detail",
+        args={"request_slug": "sciontec_hemisphere_agreement"},
+        soft=15_000,
+        hard=60_000,
+        note="Request JSON — full correspondence detail for known visible request",
+    ),
+    Probe(
+        tool="get_user_requests",
+        args={"user_slug": "julian_todd", "limit": 10},
+        soft=4_000,
+        hard=12_000,
+        note="User requests — parsed profile requests page",
+    ),
+    Probe(
+        tool="get_user_feed_items",
+        args={"user_slug": "julian_todd", "limit": 10},
+        soft=8_000,
+        hard=20_000,
+        note="User feed items — parsed Atom content, not null summaries",
+    ),
+    Probe(
+        tool="get_authority_detail",
+        args={"authority_slug": "liverpool_city_council"},
         soft=2_000,
         hard=8_000,
         note="Authority JSON — Liverpool City Council",
-    ),
-    Probe(
-        tool="read_resource",
-        args={"uri": "wdtk://users/julian_todd/feed"},
-        soft=3_000,
-        hard=10_000,
-        note="User Atom feed — prolific WDTK contributor",
-    ),
-    # THE regression canary: all.csv should be large but not infinite.
-    # If someone accidentally pipes the whole CSV into a tool result this blows up.
-    Probe(
-        tool="read_resource",
-        args={"uri": "wdtk://authorities/all.csv"},
-        soft=15_000,
-        hard=80_000,
-        note="⚠ Full authority CSV — expected large; documents baseline size",
     ),
 ]
 
