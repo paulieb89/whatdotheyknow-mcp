@@ -13,6 +13,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 from curl_cffi.requests import AsyncSession
+from curl_cffi.requests.exceptions import HTTPError as CurlHTTPError
 from prometheus_client import CONTENT_TYPE_LATEST, Counter as PromCounter, Histogram, generate_latest
 from pydantic import BaseModel, Field, HttpUrl
 from starlette.responses import JSONResponse, Response
@@ -439,7 +440,16 @@ async def get_request_detail(
     correspondence text and attachment metadata where WhatDoTheyKnow exposes it.
     """
     await ctx.info(f"Fetching request detail JSON: {request_slug}")
-    return await wdtk.get_json(f"/request/{request_slug}.json")
+    try:
+        return await wdtk.get_json(f"/request/{request_slug}.json")
+    except CurlHTTPError as exc:
+        status = getattr(exc.response, "status_code", None)
+        hint = (
+            "Slug not found — check spelling or use search_request_events to locate it."
+            if status == 404
+            else "Upstream error."
+        )
+        raise ValueError(f"WDTK returned HTTP {status} for request slug '{request_slug}'. {hint}") from exc
 
 
 @mcp.tool(
@@ -462,7 +472,16 @@ async def get_authority_detail(
     where WhatDoTheyKnow exposes them.
     """
     await ctx.info(f"Fetching authority detail JSON: {authority_slug}")
-    return await wdtk.get_json(f"/body/{authority_slug}.json")
+    try:
+        return await wdtk.get_json(f"/body/{authority_slug}.json")
+    except CurlHTTPError as exc:
+        status = getattr(exc.response, "status_code", None)
+        hint = (
+            "Slug not found — check spelling or use search_authorities to locate it."
+            if status == 404
+            else "Upstream error."
+        )
+        raise ValueError(f"WDTK returned HTTP {status} for authority slug '{authority_slug}'. {hint}") from exc
 
 
 @mcp.tool(
