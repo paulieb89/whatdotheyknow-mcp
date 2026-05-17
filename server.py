@@ -470,6 +470,9 @@ async def get_authority_detail(
     The response includes contact/profile fields, tags, publication links, and
     request statistics such as successful, overdue, and classified request counts
     where WhatDoTheyKnow exposes them.
+
+    Authority slugs use underscores, not hyphens — e.g. 'home_office' not
+    'home-office'. Use search_authorities to find the correct slug.
     """
     await ctx.info(f"Fetching authority detail JSON: {authority_slug}")
     try:
