@@ -16,6 +16,13 @@ dependencies = [
     "prometheus-client==0.24.1",
 ]
 
+[dependency-groups]
+dev = ["pytest>=9.0.3"]
+
+[tool.pytest.ini_options]
+# tests/smoke_test.py is a live script, not collected (no test_ prefix).
+testpaths = ["tests"]
+
 [project.scripts]
 whatdotheyknow-mcp = "server:main"
 
