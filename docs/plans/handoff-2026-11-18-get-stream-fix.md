@@ -66,16 +66,19 @@ uk-business-mcp's proxy.
 
 ## Open issues
 
-[#1](https://github.com/paulieb89/whatdotheyknow-mcp/issues/1) (expose full
-content and user feed). Fleet:
-[mcpfleet-obs #11](https://github.com/uk-agents/mcpfleet-obs/issues/11) (shared
-transport layer).
+[#11](https://github.com/paulieb89/whatdotheyknow-mcp/issues/11) (requires-python 3.13 vs prod's 3.12) ·
+[#10](https://github.com/paulieb89/whatdotheyknow-mcp/issues/10) (build the image from `uv.lock`) ·
+[#12](https://github.com/paulieb89/whatdotheyknow-mcp/issues/12) (stop hand deploys bypassing `release.yml`) ·
+[#1](https://github.com/paulieb89/whatdotheyknow-mcp/issues/1). Fleet:
+[mcpfleet-obs #11](https://github.com/uk-agents/mcpfleet-obs/issues/11).
 
 ## Recommended next step
 
-Build the image from `uv.lock` (as DD and uk-business-mcp do) and settle the
-Python version (3.12 vs ≥3.13). Then join the fleet's FastMCP 4.1.8 move
-(uk-due-diligence-mcp #49, uk-legal-mcp #116, govuk-mcp #11).
+In the fleet order (FastMCP 4.1.8 first, then the stdio entry points, then the
+shared package), this repo's follow-ups come last: #11, then #10 (the lock must
+resolve for the image's Python), then #12. Check whether its FastMCP should move
+to 4.1.8 alongside uk-due-diligence-mcp #49, uk-legal-mcp #116 and govuk-mcp #11.
+That fits naturally with #10's re-lock.
 
 ## Re-verify
 
