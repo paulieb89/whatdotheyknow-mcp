@@ -767,7 +767,7 @@ mcp.add_transform(PromptsAsTools(mcp))
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def smithery_server_card(request):
-    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.4"}})
+    return JSONResponse({"serverInfo": {"name": "whatdotheyknow-mcp", "version": "0.1.5"}})
 
 
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])
