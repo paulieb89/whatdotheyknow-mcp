@@ -1,5 +1,7 @@
 # whatdotheyknow-mcp
 
+Maintained by BOUCH — private hosting, custom tools and setup: paul@bouch.dev · [bouch.dev/products/whatdotheyknow-mcp](https://bouch.dev/products/whatdotheyknow-mcp)
+
 <!-- mcp-name: io.github.paulieb89/whatdotheyknow-mcp -->
 
 [![SafeSkill](https://safeskill.dev/api/badge/paulieb89-whatdotheyknow-mcp)](https://safeskill.dev/scan/paulieb89-whatdotheyknow-mcp)
